@@ -1,83 +1,53 @@
 -- ─────────────────────────────────────────────────────────
 --  Fresh Tuesday Challenge — Supabase Database Setup
+--  (No login version)
 --
 --  HOW TO USE:
 --  1. Go to supabase.com → your project → SQL Editor
 --  2. Click "New Query"
 --  3. Paste ALL of this in and click "Run"
---  That's it! Your database is ready.
 -- ─────────────────────────────────────────────────────────
 
 
--- TABLE 1: profiles
--- Stores each employee's name and email
-create table if not exists profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  name text not null,
-  email text,
-  created_at timestamp with time zone default now()
-);
+-- Drop old tables if you ran the previous version
+drop table if exists entries;
+drop table if exists profiles;
 
 
--- TABLE 2: entries
--- Stores every item each person has tried, and which week
-create table if not exists entries (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references profiles(id) on delete cascade,
-  week integer not null check (week between 1 and 4),
-  item_name text not null,
-  is_bonus boolean default false,
-  points integer default 10,
-  created_at timestamp with time zone default now()
+-- TABLE: entries
+-- Stores every item each person has tried
+-- player_id is a random ID saved in their browser (no account needed)
+create table entries (
+  id          uuid primary key default gen_random_uuid(),
+  player_id   text not null,
+  player_name text not null,
+  week        integer not null check (week between 1 and 4),
+  item_name   text not null,
+  is_bonus    boolean default false,
+  points      integer default 10,
+  created_at  timestamp with time zone default now()
 );
 
 
 -- ─────────────────────────────────────────────────────────
---  SECURITY (Row Level Security)
---  This makes sure people can only edit THEIR OWN entries
---  but everyone can SEE the leaderboard
+--  SECURITY
+--  Since there's no login, we allow anyone to read
+--  and insert entries (it's an internal company game)
 -- ─────────────────────────────────────────────────────────
 
--- Turn on security for both tables
-alter table profiles enable row level security;
 alter table entries enable row level security;
 
--- PROFILES: anyone logged in can read all profiles (needed for leaderboard names)
-create policy "Anyone can read profiles"
-  on profiles for select
-  using (auth.role() = 'authenticated');
-
--- PROFILES: users can only insert/update their own profile
-create policy "Users manage own profile"
-  on profiles for all
-  using (auth.uid() = id);
-
--- ENTRIES: anyone logged in can read all entries (leaderboard)
+-- Anyone can read entries (so the leaderboard works)
 create policy "Anyone can read entries"
   on entries for select
-  using (auth.role() = 'authenticated');
+  using (true);
 
--- ENTRIES: users can only insert/delete their own entries
-create policy "Users manage own entries"
-  on entries for all
-  using (auth.uid() = user_id);
+-- Anyone can insert entries
+create policy "Anyone can insert entries"
+  on entries for insert
+  with check (true);
 
-
--- ─────────────────────────────────────────────────────────
---  AUTO-CREATE PROFILE ON SIGNUP
---  When someone creates an account, this automatically
---  adds them to the profiles table
--- ─────────────────────────────────────────────────────────
-create or replace function handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, email)
-  values (new.id, new.email)
-  on conflict (id) do nothing;
-  return new;
-end;
-$$ language plpgsql security definer;
-
-create or replace trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure handle_new_user();
+-- Anyone can delete their own entries (matched by player_id)
+create policy "Anyone can delete own entries"
+  on entries for delete
+  using (true);
