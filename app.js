@@ -3,13 +3,11 @@
 //  Get these from: supabase.com → your project
 //  → Project Settings → API
 // ─────────────────────────────────────────────
-const SUPABASE_URL = 'https://bcizqtzwvgdadlsvdhzw.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_d7RPySz8FFXI_KaMye-6BA_-JGealZm';
+const SUPABASE_URL = 'PASTE_YOUR_SUPABASE_URL_HERE';
+const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
 // ─────────────────────────────────────────────
 //  PRODUCE DATA
-//  bonus: true = Chinese-origin item (20 pts)
-//  bonus: false = standard item (10 pts)
 // ─────────────────────────────────────────────
 const WEEKS = [
   {
@@ -64,138 +62,92 @@ const WEEKS = [
 
 // ─────────────────────────────────────────────
 //  APP STATE
+//  Everything saves to the browser (localStorage)
+//  so it's still there when they come back
 // ─────────────────────────────────────────────
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let currentUser = null;
-let currentWeek = 0;          // 0-indexed (Week 1 = index 0)
-let triedItems = [[], [], [], []]; // which item indices the user has tried per week
-let isSignUp = false;
+let playerName = '';
+let playerId = '';       // a random ID saved in the browser for this person
+let currentWeek = 0;
+let triedItems = [[], [], [], []];
 
 // ─────────────────────────────────────────────
-//  STARTUP — check if already logged in
+//  STARTUP
 // ─────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    await initApp(session.user);
+window.addEventListener('DOMContentLoaded', () => {
+  // Check if this person already entered their name before
+  const savedName = localStorage.getItem('ft_name');
+  const savedId   = localStorage.getItem('ft_id');
+
+  if (savedName && savedId) {
+    playerName = savedName;
+    playerId   = savedId;
+    loadSavedItems();
+    showApp();
   }
+  // Otherwise the name screen is already showing
 });
 
 // ─────────────────────────────────────────────
-//  AUTH: toggle between sign-in and sign-up
+//  NAME SCREEN — "Let's go" button
 // ─────────────────────────────────────────────
-function toggleAuthMode() {
-  isSignUp = !isSignUp;
-  document.getElementById('name-group').style.display = isSignUp ? 'block' : 'none';
-  document.getElementById('auth-btn').textContent = isSignUp ? 'Create account' : 'Sign in';
-  document.getElementById('auth-toggle-text').textContent = isSignUp ? 'Already have an account?' : 'No account?';
-  document.getElementById('auth-toggle-link').textContent = isSignUp ? 'Sign in' : 'Create one';
-  document.getElementById('auth-error').style.display = 'none';
-}
+function startApp() {
+  const nameInput = document.getElementById('input-name').value.trim();
+  const errEl = document.getElementById('name-error');
 
-// ─────────────────────────────────────────────
-//  AUTH: handle sign-in or sign-up
-// ─────────────────────────────────────────────
-async function handleAuth() {
-  const email = document.getElementById('input-email').value.trim();
-  const password = document.getElementById('input-password').value;
-  const name = document.getElementById('input-name').value.trim();
-  const errEl = document.getElementById('auth-error');
-  errEl.style.display = 'none';
-
-  if (!email || !password) {
-    showAuthError('Please enter your email and password.');
+  if (!nameInput) {
+    errEl.style.display = 'block';
     return;
   }
+  errEl.style.display = 'none';
 
-  showLoading(true);
+  // Save name + a unique ID for this browser
+  playerName = nameInput;
+  playerId   = localStorage.getItem('ft_id') || 'player_' + Math.random().toString(36).slice(2, 10);
 
-  if (isSignUp) {
-    if (!name) { showAuthError('Please enter your name.'); showLoading(false); return; }
+  localStorage.setItem('ft_name', playerName);
+  localStorage.setItem('ft_id',   playerId);
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) { showAuthError(error.message); showLoading(false); return; }
-
-    // Save name to profiles table
-    await supabase.from('profiles').upsert({
-      id: data.user.id,
-      name: name,
-      email: email
-    });
-
-    await initApp(data.user, name);
-  } else {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { showAuthError('Wrong email or password. Try again.'); showLoading(false); return; }
-    await initApp(data.user);
-  }
-}
-
-function showAuthError(msg) {
-  const el = document.getElementById('auth-error');
-  el.textContent = msg;
-  el.style.display = 'block';
+  loadSavedItems();
+  showApp();
 }
 
 // ─────────────────────────────────────────────
-//  SIGN OUT
+//  CHANGE NAME button in top bar
 // ─────────────────────────────────────────────
-async function handleSignOut() {
-  await supabase.auth.signOut();
-  currentUser = null;
-  triedItems = [[], [], [], []];
+function changeName() {
+  localStorage.removeItem('ft_name');
   document.getElementById('app-screen').style.display = 'none';
-  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('name-screen').style.display = 'flex';
+  document.getElementById('input-name').value = playerName;
 }
 
 // ─────────────────────────────────────────────
-//  INIT APP after login
+//  LOAD items this person already saved
 // ─────────────────────────────────────────────
-async function initApp(user, nameOverride) {
-  currentUser = user;
-  showLoading(true);
-
-  // Get profile name
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name')
-    .eq('id', user.id)
-    .single();
-
-  const displayName = nameOverride || (profile && profile.name) || user.email.split('@')[0];
-
-  // Show user's name in top bar
-  document.getElementById('user-name-display').textContent = displayName;
-  document.getElementById('user-initials').textContent = initials(displayName);
-
-  // Load this user's existing entries
-  const { data: entries } = await supabase
-    .from('entries')
-    .select('*')
-    .eq('user_id', user.id);
-
-  if (entries) {
+function loadSavedItems() {
+  const saved = localStorage.getItem('ft_tried');
+  if (saved) {
+    try { triedItems = JSON.parse(saved); }
+    catch(e) { triedItems = [[], [], [], []]; }
+  } else {
     triedItems = [[], [], [], []];
-    entries.forEach(e => {
-      const weekIdx = e.week - 1;
-      const itemIdx = WEEKS[weekIdx]?.items.findIndex(i => i.name === e.item_name);
-      if (itemIdx !== -1 && itemIdx !== undefined) {
-        if (!triedItems[weekIdx].includes(itemIdx)) {
-          triedItems[weekIdx].push(itemIdx);
-        }
-      }
-    });
   }
+}
 
-  document.getElementById('auth-screen').style.display = 'none';
+// ─────────────────────────────────────────────
+//  SHOW THE MAIN APP
+// ─────────────────────────────────────────────
+function showApp() {
+  document.getElementById('name-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
-  showLoading(false);
-
+  document.getElementById('user-name-display').textContent = playerName;
+  document.getElementById('user-initials').textContent = initials(playerName);
   renderWeekNav();
   renderProduceGrid();
   updateStats();
-  await loadLeaderboard();
+  loadLeaderboard();
 }
 
 // ─────────────────────────────────────────────
@@ -206,14 +158,10 @@ function renderWeekNav() {
   nav.innerHTML = '';
   WEEKS.forEach((w, i) => {
     const btn = document.createElement('button');
-    const hasTried = triedItems[i].length > 0;
+    const hasTried = triedItems[i] && triedItems[i].length > 0;
     btn.className = 'week-pill' + (i === currentWeek ? ' active' : '') + (hasTried && i !== currentWeek ? ' done' : '');
     btn.textContent = `Week ${i + 1}${hasTried ? ' ✓' : ''}`;
-    btn.onclick = () => {
-      currentWeek = i;
-      renderWeekNav();
-      renderProduceGrid();
-    };
+    btn.onclick = () => { currentWeek = i; renderWeekNav(); renderProduceGrid(); };
     nav.appendChild(btn);
   });
 }
@@ -228,11 +176,10 @@ function renderProduceGrid() {
   grid.innerHTML = '';
 
   week.items.forEach((item, i) => {
-    const tried = triedItems[currentWeek].includes(i);
+    const tried = triedItems[currentWeek] && triedItems[currentWeek].includes(i);
     const card = document.createElement('div');
     card.className = 'produce-card' + (tried ? ' tried' : '') + (item.bonus ? ' bonus-item' : '');
     card.onclick = () => toggleItem(i);
-
     card.innerHTML = `
       <div class="produce-emoji">${item.emoji}</div>
       <div class="produce-name">${item.name}</div>
@@ -245,13 +192,18 @@ function renderProduceGrid() {
 }
 
 // ─────────────────────────────────────────────
-//  TOGGLE AN ITEM (tap to try / untry)
+//  TOGGLE AN ITEM
 // ─────────────────────────────────────────────
 function toggleItem(idx) {
+  if (!triedItems[currentWeek]) triedItems[currentWeek] = [];
   const arr = triedItems[currentWeek];
   const pos = arr.indexOf(idx);
   if (pos === -1) arr.push(idx);
   else arr.splice(pos, 1);
+
+  // Save to browser immediately
+  localStorage.setItem('ft_tried', JSON.stringify(triedItems));
+
   renderProduceGrid();
   updateStats();
 }
@@ -262,15 +214,16 @@ function toggleItem(idx) {
 function calcStats() {
   let pts = 0, tried = 0, bonus = 0, weeksDone = 0;
   triedItems.forEach((arr, wi) => {
-    if (arr.length > 0) weeksDone++;
-    arr.forEach(i => {
+    if (arr && arr.length > 0) weeksDone++;
+    (arr || []).forEach(i => {
       const item = WEEKS[wi].items[i];
+      if (!item) return;
       pts += item.bonus ? 20 : 10;
       tried++;
       if (item.bonus) bonus++;
     });
   });
-  if (weeksDone === 4) pts += 15; // streak bonus
+  if (weeksDone === 4) pts += 15;
   return { pts, tried, bonus };
 }
 
@@ -282,12 +235,10 @@ function updateStats() {
 }
 
 // ─────────────────────────────────────────────
-//  SAVE ENTRY TO SUPABASE
+//  SAVE TO SUPABASE (leaderboard)
 // ─────────────────────────────────────────────
 async function saveEntry() {
-  if (!currentUser) return;
-
-  const arr = triedItems[currentWeek];
+  const arr = triedItems[currentWeek] || [];
   if (arr.length === 0) {
     showToast('Tap at least one item you tried first!');
     return;
@@ -295,30 +246,31 @@ async function saveEntry() {
 
   showLoading(true);
 
-  // Delete existing entries for this user + week (so we can re-save cleanly)
+  // Delete old entries for this player + week
   await supabase.from('entries')
     .delete()
-    .eq('user_id', currentUser.id)
+    .eq('player_id', playerId)
     .eq('week', currentWeek + 1);
 
   // Insert fresh entries
   const rows = arr.map(i => ({
-    user_id: currentUser.id,
-    week: currentWeek + 1,
-    item_name: WEEKS[currentWeek].items[i].name,
-    is_bonus: WEEKS[currentWeek].items[i].bonus,
-    points: WEEKS[currentWeek].items[i].bonus ? 20 : 10
+    player_id:  playerId,
+    player_name: playerName,
+    week:       currentWeek + 1,
+    item_name:  WEEKS[currentWeek].items[i].name,
+    is_bonus:   WEEKS[currentWeek].items[i].bonus,
+    points:     WEEKS[currentWeek].items[i].bonus ? 20 : 10
   }));
 
   const { error } = await supabase.from('entries').insert(rows);
   showLoading(false);
 
   if (error) {
-    showToast('Something went wrong. Please try again.');
+    showToast('Something went wrong. Try again.');
     console.error(error);
   } else {
     showToast('Saved! Great work this week 🎉');
-    renderWeekNav(); // update checkmarks on week pills
+    renderWeekNav();
     await loadLeaderboard();
   }
 }
@@ -329,61 +281,44 @@ async function saveEntry() {
 const AVATAR_COLORS = [
   ['#B5D4F4','#185FA5'], ['#C0DD97','#3B6D11'], ['#FAC775','#854F0B'],
   ['#F5C4B3','#993C1D'], ['#9FE1CB','#0F6E56'], ['#F4C0D1','#993556'],
-  ['#CCC','#444']
+  ['#D3D1C7','#444441']
 ];
 
 async function loadLeaderboard() {
   const lbEl = document.getElementById('lb-list');
   lbEl.innerHTML = '<div class="lb-empty">Loading...</div>';
 
-  // Get all entries
   const { data: entries, error } = await supabase
     .from('entries')
-    .select('user_id, points, is_bonus, week');
+    .select('player_id, player_name, points, is_bonus, week');
 
-  if (error) {
-    lbEl.innerHTML = '<div class="lb-empty">Could not load leaderboard.</div>';
-    return;
-  }
-
-  if (!entries || entries.length === 0) {
+  if (error || !entries || entries.length === 0) {
     lbEl.innerHTML = '<div class="lb-empty">No entries yet — be the first! 🌿</div>';
     return;
   }
 
-  // Get all profiles
-  const userIds = [...new Set(entries.map(e => e.user_id))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name')
-    .in('id', userIds);
-
-  const profileMap = {};
-  (profiles || []).forEach(p => profileMap[p.id] = p.name);
-
-  // Aggregate per user
+  // Aggregate per player
   const totals = {};
   entries.forEach(e => {
-    if (!totals[e.user_id]) totals[e.user_id] = { pts: 0, tried: 0, bonus: 0, weeks: new Set() };
-    totals[e.user_id].pts += e.points;
-    totals[e.user_id].tried++;
-    if (e.is_bonus) totals[e.user_id].bonus++;
-    totals[e.user_id].weeks.add(e.week);
+    if (!totals[e.player_id]) {
+      totals[e.player_id] = { name: e.player_name, pts: 0, tried: 0, bonus: 0, weeks: new Set() };
+    }
+    totals[e.player_id].pts += e.points;
+    totals[e.player_id].tried++;
+    if (e.is_bonus) totals[e.player_id].bonus++;
+    totals[e.player_id].weeks.add(e.week);
   });
 
   // Add streak bonus
-  Object.values(totals).forEach(t => {
-    if (t.weeks.size === 4) t.pts += 15;
-  });
+  Object.values(totals).forEach(t => { if (t.weeks.size === 4) t.pts += 15; });
 
-  // Sort by points
   const sorted = Object.entries(totals)
-    .map(([uid, t]) => ({ uid, ...t, name: profileMap[uid] || 'Team member' }))
+    .map(([pid, t]) => ({ pid, ...t }))
     .sort((a, b) => b.pts - a.pts);
 
   lbEl.innerHTML = '';
   sorted.forEach((row, i) => {
-    const isMe = currentUser && row.uid === currentUser.id;
+    const isMe = row.pid === playerId;
     const [bg, tc] = AVATAR_COLORS[i % AVATAR_COLORS.length];
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
     const div = document.createElement('div');
@@ -404,12 +339,11 @@ async function loadLeaderboard() {
 // ─────────────────────────────────────────────
 //  TAB SWITCHING
 // ─────────────────────────────────────────────
-function switchTab(name) {
+function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
-
+  btn.classList.add('active');
   if (name === 'leaderboard') loadLeaderboard();
 }
 
@@ -419,11 +353,9 @@ function switchTab(name) {
 function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
-
 function showLoading(on) {
   document.getElementById('loading').style.display = on ? 'flex' : 'none';
 }
-
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
