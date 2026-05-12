@@ -3,8 +3,8 @@
 //  Get these from: supabase.com → your project
 //  → Project Settings → API
 // ─────────────────────────────────────────────
-const SUPABASE_URL = 'PASTE_YOUR_SUPABASE_URL_HERE';
-const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
+const SUPABASE_URL = 'https://bcizqtzwvgdadlsvdhzw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_d7RPySz8FFXI_KaMye-6BA_-JGealZm';
 
 // ─────────────────────────────────────────────
 //  PRODUCE DATA
