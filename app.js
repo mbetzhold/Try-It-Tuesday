@@ -2,8 +2,8 @@
 //  PASTE YOUR SUPABASE DETAILS HERE
 //  supabase.com → your project → Project Settings → API
 // ============================================
-var SUPABASE_URL = 'PASTE_YOUR_SUPABASE_URL_HERE';
-var SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
+var SUPABASE_URL = 'https://bcizqtzwvgdadlsvdhzw.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_d7RPySz8FFXI_KaMye-6BA_-JGealZm';
 
 // ============================================
 //  PRODUCE DATA
