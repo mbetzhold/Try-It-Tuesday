@@ -3,7 +3,7 @@
 //  supabase.com → your project → Project Settings → API
 // ============================================
 var SUPABASE_URL = 'https://bcizqtzwvgdadlsvdhzw.supabase.co';
-var SUPABASE_ANON_KEY = 'sb_publishable_d7RPySz8FFXI_KaMye-6BA_-JGealZm';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjaXpxdHp3dmdkYWRsc3ZkaHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODk1OTIsImV4cCI6MjA5NDE2NTU5Mn0.WxgZQJY8lpEOYZJ0pXHy8riiD5_a9qSe4smke27HfwI';
 
 // ============================================
 //  PRODUCE DATA
